@@ -109,7 +109,9 @@ jobs:
             echo "ERROR: Failed to prepare release asset."
             exit 1
           fi
+          (cd "$ASSET_DIR" && zip app-debug.zip app-debug.apk)
           echo "asset_path=$ASSET_DIR/app-debug.apk" >> $GITHUB_OUTPUT
+          echo "zip_path=$ASSET_DIR/app-debug.zip" >> $GITHUB_OUTPUT
 
       - name: Publish APK to GitHub Releases
         id: create_release
@@ -128,20 +130,21 @@ jobs:
             echo "ERROR: Release asset filename must be exactly app-debug.apk"
             exit 1
           fi
+          ZIP_ASSET="${{ steps.prepare_asset.outputs.zip_path }}"
           TAG="debug-apk-build-${{ github.run_number }}-${{ github.run_attempt }}"
           TITLE="Debug APK Build #${{ github.run_number }}"
           cat << 'EOF' > release_notes.md
           ### Debug APK Build
 
-          This is an automatically generated debug APK built by GitHub Actions.
+          This is an automatically generated debug APK and ZIP package built by GitHub Actions.
           - **Run Number**: ${{ github.run_number }}
           - **Run Attempt**: ${{ github.run_attempt }}
           - **Source Commit**: ${{ github.sha }}
 
-          > ⚠️ **Note**: This APK is intended for testing and development purposes. It is not a Play Store production release and is signed only with a temporary debug keystore.
+          > ⚠️ **Note**: This APK is intended for testing and development purposes. It is signed with a debug keystore.
           EOF
 
-          gh release create "$TAG" "$ASSET" \
+          gh release create "$TAG" "$ASSET" "$ZIP_ASSET" \
             --target "${{ github.sha }}" \
             --title "$TITLE" \
             --notes-file release_notes.md \
@@ -157,11 +160,14 @@ jobs:
             echo "Release creation succeeded."
             gh release view "$TAG" || true
             DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/latest/download/app-debug.apk"
+            ZIP_URL="https://github.com/${{ github.repository }}/releases/latest/download/app-debug.zip"
             echo "Direct APK URL: $DOWNLOAD_URL"
+            echo "Direct ZIP URL: $ZIP_URL"
             {
-              echo "## DIRECT APK DOWNLOAD"
+              echo "## DIRECT APK & ZIP DOWNLOAD"
               echo ""
-              echo "[Download app-debug.apk]($DOWNLOAD_URL)"
+              echo "- [Download app-debug.apk]($DOWNLOAD_URL)"
+              echo "- [Download app-debug.zip]($ZIP_URL)"
               echo ""
               echo "The normal Actions artifact \`app-debug-apk\` remains available as a backup."
             } >> $GITHUB_STEP_SUMMARY
