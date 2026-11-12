@@ -15,7 +15,12 @@ data class Transcript(
     val sourceUri: String? = null,
     val sourceFileName: String? = null,
     val isPinned: Boolean = false,
-    val isRtl: Boolean = false
+    val isRtl: Boolean = false,
+    val originalLanguageCode: String? = null,
+    val targetLanguageCode: String? = null,
+    val originalLanguageName: String? = null,
+    val targetLanguageName: String? = null,
+    val translatedText: String? = null
 ) {
     val wordCount: Int
         get() = words.size.takeIf { it > 0 } ?: fullText.split("\\s+".toRegex()).count { it.isNotBlank() }

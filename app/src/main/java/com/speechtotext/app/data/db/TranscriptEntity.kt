@@ -21,7 +21,12 @@ data class TranscriptEntity(
     val sourceUri: String?,
     val sourceFileName: String?,
     val isPinned: Boolean = false,
-    val isRtl: Boolean = false
+    val isRtl: Boolean = false,
+    val originalLanguageCode: String? = null,
+    val targetLanguageCode: String? = null,
+    val originalLanguageName: String? = null,
+    val targetLanguageName: String? = null,
+    val translatedText: String? = null
 ) {
     fun toDomain(): Transcript {
         val words = try {
@@ -45,7 +50,12 @@ data class TranscriptEntity(
             sourceUri = sourceUri,
             sourceFileName = sourceFileName,
             isPinned = isPinned,
-            isRtl = isRtl
+            isRtl = isRtl,
+            originalLanguageCode = originalLanguageCode,
+            targetLanguageCode = targetLanguageCode,
+            originalLanguageName = originalLanguageName,
+            targetLanguageName = targetLanguageName,
+            translatedText = translatedText
         )
     }
 
@@ -68,7 +78,12 @@ data class TranscriptEntity(
                 sourceUri = transcript.sourceUri,
                 sourceFileName = transcript.sourceFileName,
                 isPinned = transcript.isPinned,
-                isRtl = transcript.isRtl
+                isRtl = transcript.isRtl,
+                originalLanguageCode = transcript.originalLanguageCode,
+                targetLanguageCode = transcript.targetLanguageCode,
+                originalLanguageName = transcript.originalLanguageName,
+                targetLanguageName = transcript.targetLanguageName,
+                translatedText = transcript.translatedText
             )
         }
     }

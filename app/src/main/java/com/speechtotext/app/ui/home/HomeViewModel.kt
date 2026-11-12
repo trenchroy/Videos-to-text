@@ -5,6 +5,7 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.speechtotext.app.data.db.AppDatabase
@@ -14,10 +15,15 @@ import com.speechtotext.app.domain.Language
 import com.speechtotext.app.domain.Transcript
 import com.speechtotext.app.domain.WordTiming
 import com.speechtotext.app.engine.AudioDecoder
+import com.speechtotext.app.engine.AutoLanguageDetector
+import com.speechtotext.app.engine.DetectionResult
 import com.speechtotext.app.engine.ModelListRepository
 import com.speechtotext.app.engine.ModelManager
 import com.speechtotext.app.engine.TranscribeService
+import com.speechtotext.app.engine.TargetLanguage
+import com.speechtotext.app.engine.TranslatorEngine
 import com.speechtotext.app.engine.VoskEngine
+import com.speechtotext.app.util.CaptionGrouper
 import com.speechtotext.app.util.TimeFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,7 +37,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 data class SelectedMediaInfo(
     val uri: Uri,
@@ -42,10 +47,29 @@ data class SelectedMediaInfo(
     val isVideo: Boolean
 )
 
+data class DetectionUiState(
+    val isDetecting: Boolean = false,
+    val detectedLanguage: Language? = null,
+    val confidencePercent: Int = 0,
+    val isLowConfidence: Boolean = false,
+    val secondChoice: Language? = null,
+    val secondChoicePercent: Int = 0,
+    val statusText: String = "",
+    val errorMessage: String? = null,
+    val notEnoughLanguages: Boolean = false,
+    val isConfirmed: Boolean = false
+)
+
 data class HomeUiState(
     val selectedMedia: SelectedMediaInfo? = null,
-    val selectedLanguage: Language? = null,
+    val isAutoDetect: Boolean = true,
+    val selectedOriginalLanguage: Language? = null,
+    val selectedTargetLanguage: TargetLanguage = TranslatorEngine.supportedTargetLanguages.first(),
     val downloadedLanguages: List<Language> = emptyList(),
+    val availableTargetLanguages: List<TargetLanguage> = TranslatorEngine.supportedTargetLanguages,
+    val detection: DetectionUiState = DetectionUiState(),
+    val isSameLanguageWarning: Boolean = false,
+    val pivotNotice: String? = null,
     val isTranscribing: Boolean = false,
     val progressPercent: Int = 0,
     val speedMultiplier: Float = 1.0f,
@@ -61,7 +85,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val modelManager = ModelManager(application)
     private val repository = ModelListRepository(application)
     private val database = AppDatabase.getInstance(application)
-    private val settingsStore = SettingsStore(application)
+    val settingsStore = SettingsStore(application)
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -70,18 +94,41 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val navigationEvent: SharedFlow<Long> = _navigationEvent.asSharedFlow()
 
     private var transcribeJob: Job? = null
+    private var detectJob: Job? = null
     private var allLanguagesList: List<Language> = emptyList()
 
     init {
-        loadLanguages()
+        loadLanguagesAndSettings()
     }
 
-    fun loadLanguages() {
+    private fun loadLanguagesAndSettings() {
         viewModelScope.launch {
             try {
                 val languages = repository.getAvailableLanguages()
                 allLanguagesList = languages
-                refreshDownloadedLanguages()
+                modelManager.refreshStatuses()
+                val downloaded = allLanguagesList.filter { modelManager.isModelReady(it.modelName) }
+
+                val lastOrig = settingsStore.lastOriginalLanguage.first()
+                val lastTarget = settingsStore.lastTargetLanguage.first()
+
+                val isAuto = lastOrig.equals("auto", ignoreCase = true)
+                val origLang = if (!isAuto) {
+                    downloaded.find { it.code.equals(lastOrig, ignoreCase = true) }
+                        ?: allLanguagesList.find { it.code.equals(lastOrig, ignoreCase = true) }
+                } else null
+
+                val targetLang = TranslatorEngine.supportedTargetLanguages.find {
+                    it.code.equals(lastTarget, ignoreCase = true)
+                } ?: TranslatorEngine.supportedTargetLanguages.first()
+
+                _uiState.value = _uiState.value.copy(
+                    downloadedLanguages = downloaded,
+                    isAutoDetect = isAuto,
+                    selectedOriginalLanguage = origLang,
+                    selectedTargetLanguage = targetLang
+                )
+                checkSameLanguageRule()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -91,25 +138,112 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshDownloadedLanguages() {
         modelManager.refreshStatuses()
         val downloaded = allLanguagesList.filter { modelManager.isModelReady(it.modelName) }
-        val currentSelected = _uiState.value.selectedLanguage
+        _uiState.value = _uiState.value.copy(downloadedLanguages = downloaded)
+        checkSameLanguageRule()
+    }
 
-        // Default language from settings if not selected
+    fun selectOriginalAuto() {
         viewModelScope.launch {
-            val defaultLangCode = settingsStore.defaultLanguage.first()
-            val preferred = downloaded.find { it.code == defaultLangCode }
-                ?: downloaded.firstOrNull()
-                ?: allLanguagesList.find { it.code == defaultLangCode }
-                ?: allLanguagesList.firstOrNull()
+            settingsStore.setLastOriginalLanguage("auto")
+        }
+        _uiState.value = _uiState.value.copy(
+            isAutoDetect = true,
+            selectedOriginalLanguage = null,
+            detection = DetectionUiState(),
+            errorMessage = null
+        )
+        checkSameLanguageRule()
+    }
 
+    fun selectOriginalLanguage(language: Language) {
+        viewModelScope.launch {
+            settingsStore.setLastOriginalLanguage(language.code)
+            settingsStore.recordLanguageUsage(language.code)
+        }
+        _uiState.value = _uiState.value.copy(
+            isAutoDetect = false,
+            selectedOriginalLanguage = language,
+            detection = DetectionUiState(),
+            errorMessage = null
+        )
+        checkSameLanguageRule()
+    }
+
+    fun selectTargetLanguage(targetLanguage: TargetLanguage) {
+        viewModelScope.launch {
+            settingsStore.setLastTargetLanguage(targetLanguage.code)
+        }
+        _uiState.value = _uiState.value.copy(
+            selectedTargetLanguage = targetLanguage,
+            errorMessage = null
+        )
+        checkSameLanguageRule()
+    }
+
+    fun swapLanguages() {
+        // Disabled when original is Auto
+        if (_uiState.value.isAutoDetect) return
+
+        val currentOrig = _uiState.value.selectedOriginalLanguage ?: return
+        val currentTarget = _uiState.value.selectedTargetLanguage
+
+        // Can we make target the original? Must have downloaded Vosk model
+        val targetMatchingVosk = _uiState.value.downloadedLanguages.find {
+            it.code.equals(currentTarget.code, ignoreCase = true) ||
+            TranslatorEngine.mapVoskToMlKitTag(it.code).equals(currentTarget.code, ignoreCase = true)
+        }
+
+        if (targetMatchingVosk == null) {
             _uiState.value = _uiState.value.copy(
-                downloadedLanguages = downloaded,
-                selectedLanguage = currentSelected ?: preferred
+                errorMessage = "${currentTarget.displayName} ka Vosk offline model downloaded nahi hai, isliye ise Original language me swap nahi kiya ja sakta."
             )
+            return
+        }
+
+        // New target becomes current original
+        val newTargetTag = TranslatorEngine.mapVoskToMlKitTag(currentOrig.code)
+        val newTarget = TranslatorEngine.supportedTargetLanguages.find {
+            it.code.equals(newTargetTag, ignoreCase = true) || it.code.equals(currentOrig.code, ignoreCase = true)
+        } ?: TranslatorEngine.supportedTargetLanguages.first()
+
+        selectOriginalLanguage(targetMatchingVosk)
+        selectTargetLanguage(newTarget)
+    }
+
+    private fun checkSameLanguageRule() {
+        val orig = _uiState.value.selectedOriginalLanguage
+        val target = _uiState.value.selectedTargetLanguage
+        if (orig != null) {
+            val origMlTag = TranslatorEngine.mapVoskToMlKitTag(orig.code)
+            val isSame = origMlTag.equals(target.code, ignoreCase = true) ||
+                (orig.code.startsWith("hi") && target.code == "hi") ||
+                (orig.code.startsWith("en") && target.code == "en")
+            _uiState.value = _uiState.value.copy(isSameLanguageWarning = isSame)
+        } else {
+            _uiState.value = _uiState.value.copy(isSameLanguageWarning = false)
         }
     }
 
-    fun selectLanguage(language: Language) {
-        _uiState.value = _uiState.value.copy(selectedLanguage = language)
+    fun confirmDetectedLanguage(language: Language) {
+        viewModelScope.launch {
+            settingsStore.recordLanguageUsage(language.code)
+        }
+        _uiState.value = _uiState.value.copy(
+            selectedOriginalLanguage = language,
+            detection = _uiState.value.detection.copy(
+                detectedLanguage = language,
+                isConfirmed = true,
+                isLowConfidence = false
+            )
+        )
+        checkSameLanguageRule()
+    }
+
+    fun changeDetectedLanguageManually() {
+        _uiState.value = _uiState.value.copy(
+            isAutoDetect = false,
+            detection = DetectionUiState()
+        )
     }
 
     fun onMediaSelected(uri: Uri) {
@@ -157,6 +291,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         mimeType = mimeType,
                         isVideo = isVideo
                     ),
+                    detection = DetectionUiState(),
                     errorMessage = null
                 )
             } catch (e: Exception) {
@@ -167,23 +302,123 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun runAutoDetectSample(onSuccessCallback: ((Language) -> Unit)? = null) {
+        val media = _uiState.value.selectedMedia ?: run {
+            _uiState.value = _uiState.value.copy(errorMessage = "Kripya pehle video ya audio file chunein")
+            return
+        }
+
+        val downloaded = _uiState.value.downloadedLanguages
+        if (downloaded.size < 2) {
+            _uiState.value = _uiState.value.copy(
+                detection = _uiState.value.detection.copy(
+                    notEnoughLanguages = true,
+                    statusText = "Auto detect ke liye kam se kam 2 bhasha download karo"
+                )
+            )
+            return
+        }
+
+        _uiState.value = _uiState.value.copy(
+            detection = DetectionUiState(isDetecting = true, statusText = "15-20s speech sample analyze ho raha hai...")
+        )
+
+        detectJob = viewModelScope.launch(Dispatchers.IO) {
+            val recentCodes = settingsStore.recentLanguages.first()
+            val result = AutoLanguageDetector.detectLanguage(
+                context = context,
+                mediaUri = media.uri,
+                downloadedLanguages = downloaded,
+                modelManager = modelManager,
+                recentlyUsedCodes = recentCodes,
+                onStatusUpdate = { status ->
+                    _uiState.value = _uiState.value.copy(
+                        detection = _uiState.value.detection.copy(statusText = status)
+                    )
+                }
+            )
+
+            when (result) {
+                is DetectionResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        selectedOriginalLanguage = if (!result.isLowConfidence) result.topLanguage else null,
+                        detection = DetectionUiState(
+                            isDetecting = false,
+                            detectedLanguage = result.topLanguage,
+                            confidencePercent = result.confidencePercent,
+                            isLowConfidence = result.isLowConfidence,
+                            secondChoice = result.secondChoice,
+                            secondChoicePercent = result.secondChoicePercent,
+                            statusText = "Detected: ${result.topLanguage.nativeName} (${result.confidencePercent}% sure)",
+                            isConfirmed = !result.isLowConfidence
+                        )
+                    )
+                    checkSameLanguageRule()
+                    if (!result.isLowConfidence) {
+                        onSuccessCallback?.invoke(result.topLanguage)
+                    }
+                }
+                is DetectionResult.NotEnoughLanguages -> {
+                    _uiState.value = _uiState.value.copy(
+                        detection = DetectionUiState(
+                            isDetecting = false,
+                            notEnoughLanguages = true,
+                            errorMessage = result.message
+                        )
+                    )
+                }
+                is DetectionResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        detection = DetectionUiState(
+                            isDetecting = false,
+                            errorMessage = result.message
+                        )
+                    )
+                }
+            }
+        }
+    }
+
     fun startTranscription() {
         val media = _uiState.value.selectedMedia ?: run {
             _uiState.value = _uiState.value.copy(errorMessage = "Kripya pehle video ya audio file chunein")
             return
         }
-        val language = _uiState.value.selectedLanguage ?: run {
-            _uiState.value = _uiState.value.copy(errorMessage = "Kripya ek bhasha chunein")
+
+        // If Auto Detect is active and language is not yet confirmed
+        if (_uiState.value.isAutoDetect && _uiState.value.selectedOriginalLanguage == null) {
+            runAutoDetectSample { detected ->
+                proceedWithTranscription(media, detected)
+            }
             return
         }
 
-        val modelDir = modelManager.getModelDirectory(language.modelName)
-        if (modelDir == null) {
+        val originalLang = _uiState.value.selectedOriginalLanguage ?: run {
+            _uiState.value = _uiState.value.copy(errorMessage = "Kripya original bhasha chunein ya Auto Detect chalayein")
+            return
+        }
+
+        // Target rules check: Same language warning blocks translation
+        if (_uiState.value.isSameLanguageWarning) {
             _uiState.value = _uiState.value.copy(
-                errorMessage = "${language.nativeName} (${language.englishName}) model downloaded nahi hai. Pehle download karein."
+                errorMessage = "Original bhasha (${originalLang.nativeName}) aur Target bhasha (${_uiState.value.selectedTargetLanguage.displayName}) same hain! Kripya alag target bhasha chunein."
             )
             return
         }
+
+        proceedWithTranscription(media, originalLang)
+    }
+
+    private fun proceedWithTranscription(media: SelectedMediaInfo, originalLang: Language) {
+        val modelDir = modelManager.getModelDirectory(originalLang.modelName)
+        if (modelDir == null) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "${originalLang.nativeName} (${originalLang.englishName}) model downloaded nahi hai. Pehle download karein."
+            )
+            return
+        }
+
+        val targetLang = _uiState.value.selectedTargetLanguage
 
         _uiState.value = _uiState.value.copy(
             isTranscribing = true,
@@ -191,11 +426,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             speedMultiplier = 1.0f,
             remainingSeconds = 0L,
             processedSeconds = 0.0,
-            statusMessage = "Audio decode aur prepare ho raha hai...",
+            pivotNotice = null,
+            statusMessage = "Audio decode aur Vosk recognition shuru ho raha hai...",
             errorMessage = null
         )
 
-        TranscribeService.start(context, "Transcription shuru ho raha hai...")
+        TranscribeService.start(context, "Transcription & Translation shuru ho raha hai...")
 
         transcribeJob = viewModelScope.launch(Dispatchers.IO) {
             var voskEngine: VoskEngine? = null
@@ -239,21 +475,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (!success || !isActive || TranscribeService.isCancelled.value) {
                     _uiState.value = _uiState.value.copy(
                         isTranscribing = false,
-                        statusMessage = "Transcription cancel ho gaya"
+                        statusMessage = "Process cancel ho gaya"
                     )
                     TranscribeService.stop(context)
                     return@launch
                 }
 
-                // Flush final result
+                // Flush final recognition
                 val finalChunk = voskEngine.getFinalResult()
                 if (finalChunk.text.isNotBlank()) {
                     fullWords.addAll(finalChunk.words)
                     fullTextParts.add(finalChunk.text)
                 }
 
-                val finalFullText = fullTextParts.joinToString(" ").trim()
-                if (finalFullText.isBlank()) {
+                val originalFullText = fullTextParts.joinToString(" ").trim()
+                if (originalFullText.isBlank()) {
                     _uiState.value = _uiState.value.copy(
                         isTranscribing = false,
                         errorMessage = "Audio me koi aawaz ya bol nahi mile (No speech found)"
@@ -262,17 +498,74 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
+                // Now execute Translation if target is selected
+                _uiState.value = _uiState.value.copy(
+                    statusMessage = "Offline ML Kit Translation chal raha hai..."
+                )
+                TranscribeService.updateProgress(context, 92, "Translating text offline...")
+
+                var pivotNote: String? = null
+                val translatedFullText = try {
+                    TranslatorEngine.translate(
+                        sourceVoskCode = originalLang.code,
+                        targetCode = targetLang.code,
+                        text = originalFullText,
+                        onPivotMessage = { note ->
+                            pivotNote = note
+                            _uiState.value = _uiState.value.copy(pivotNotice = note)
+                        }
+                    )
+                } catch (e: Exception) {
+                    Log.e("HomeViewModel", "Translation failed, falling back to original", e)
+                    originalFullText
+                }
+
+                // Translate captions line by line to preserve word timestamps
+                val captionLines = CaptionGrouper.groupCaptions(fullWords)
+                val translatedWords = mutableListOf<WordTiming>()
+
+                for (line in captionLines) {
+                    val lineTrans = try {
+                        TranslatorEngine.translate(
+                            sourceVoskCode = originalLang.code,
+                            targetCode = targetLang.code,
+                            text = line.text
+                        )
+                    } catch (e: Exception) {
+                        line.text
+                    }
+
+                    // Spread line timings across translated words
+                    val wordsInLine = lineTrans.split("\\s+".toRegex()).filter { it.isNotBlank() }
+                    if (wordsInLine.isNotEmpty()) {
+                        val duration = (line.end - line.start).coerceAtLeast(0.1)
+                        val wordDuration = duration / wordsInLine.size
+                        wordsInLine.forEachIndexed { idx, w ->
+                            val s = line.start + (idx * wordDuration)
+                            val e = (s + wordDuration).coerceAtMost(line.end)
+                            translatedWords.add(WordTiming(word = w, start = s, end = e))
+                        }
+                    }
+                }
+
+                val finalWords = if (translatedWords.isNotEmpty()) translatedWords else fullWords
+
                 // Auto-save to Room database
                 val transcript = Transcript(
                     title = media.fileName.substringBeforeLast("."),
                     durationSeconds = media.durationSeconds,
-                    languageCode = language.code,
-                    languageName = language.nativeName,
-                    fullText = finalFullText,
-                    words = fullWords,
+                    languageCode = originalLang.code,
+                    languageName = originalLang.nativeName,
+                    fullText = translatedFullText,
+                    words = finalWords,
                     sourceUri = media.uri.toString(),
                     sourceFileName = media.fileName,
-                    isRtl = language.isRtl
+                    isRtl = originalLang.isRtl || targetLang.code == "ar" || targetLang.code == "fa" || targetLang.code == "ur",
+                    originalLanguageCode = originalLang.code,
+                    targetLanguageCode = targetLang.code,
+                    originalLanguageName = originalLang.nativeName,
+                    targetLanguageName = targetLang.displayName,
+                    translatedText = translatedFullText
                 )
 
                 val entity = TranscriptEntity.fromDomain(transcript)
@@ -281,18 +574,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = _uiState.value.copy(
                     isTranscribing = false,
                     progressPercent = 100,
-                    statusMessage = "Transcription pura ho gaya!"
+                    statusMessage = "Transcription aur Translation pura ho gaya!"
                 )
                 TranscribeService.stop(context)
 
-                // Emit navigation to ResultScreen
+                // Record language usage for auto-detect ranking
+                settingsStore.recordLanguageUsage(originalLang.code)
+
                 _navigationEvent.emit(newId)
 
             } catch (e: Exception) {
                 e.printStackTrace()
                 _uiState.value = _uiState.value.copy(
                     isTranscribing = false,
-                    errorMessage = "Transcription me error aaya: ${e.localizedMessage}"
+                    errorMessage = "Error aaya: ${e.localizedMessage}"
                 )
                 TranscribeService.stop(context)
             } finally {
@@ -304,8 +599,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun cancelTranscription() {
         TranscribeService.cancelTranscription()
         transcribeJob?.cancel()
+        detectJob?.cancel()
         _uiState.value = _uiState.value.copy(
             isTranscribing = false,
+            detection = _uiState.value.detection.copy(isDetecting = false),
             statusMessage = "Process cancel kar diya gaya"
         )
         TranscribeService.stop(context)

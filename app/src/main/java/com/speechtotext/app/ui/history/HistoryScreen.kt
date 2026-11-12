@@ -223,15 +223,21 @@ fun HistoryScreen(
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
+                                        val langText = if (!item.targetLanguageName.isNullOrBlank() && item.targetLanguageName != item.originalLanguageName) {
+                                            "${item.originalLanguageName ?: item.languageName} ➔ ${item.targetLanguageName}"
+                                        } else {
+                                            item.languageName
+                                        }
+
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(6.dp))
-                                                .background(CyanNeon.copy(alpha = 0.15f))
+                                                .background(if (item.targetLanguageName != null) GoldAccent.copy(alpha = 0.15f) else CyanNeon.copy(alpha = 0.15f))
                                                 .padding(horizontal = 8.dp, vertical = 2.dp)
                                         ) {
                                             Text(
-                                                text = item.languageName,
-                                                color = CyanNeon,
+                                                text = langText,
+                                                color = if (item.targetLanguageName != null) GoldAccent else CyanNeon,
                                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
                                             )
                                         }

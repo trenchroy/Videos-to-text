@@ -19,6 +19,21 @@ class SettingsStore(private val context: Context) {
         val KEY_MAX_WORDS_PER_LINE = intPreferencesKey("max_words_per_line")
         val KEY_CHINESE_CHARS_PER_LINE = intPreferencesKey("chinese_chars_per_line")
         val KEY_DEFAULT_PRESET = stringPreferencesKey("default_preset")
+        val KEY_LAST_ORIGINAL_LANG = stringPreferencesKey("last_original_lang")
+        val KEY_LAST_TARGET_LANG = stringPreferencesKey("last_target_lang")
+        val KEY_RECENT_LANGUAGES = stringPreferencesKey("recent_languages")
+    }
+
+    val lastOriginalLanguage: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_LAST_ORIGINAL_LANG] ?: "auto"
+    }
+
+    val lastTargetLanguage: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_LAST_TARGET_LANG] ?: "hinglish"
+    }
+
+    val recentLanguages: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        prefs[KEY_RECENT_LANGUAGES]?.split(",")?.filter { it.isNotBlank() } ?: listOf("hi", "en-us", "cn", "ja")
     }
 
     val defaultLanguage: Flow<String> = context.dataStore.data.map { prefs ->
@@ -59,5 +74,23 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setDefaultPreset(preset: String) {
         context.dataStore.edit { it[KEY_DEFAULT_PRESET] = preset }
+    }
+
+    suspend fun setLastOriginalLanguage(code: String) {
+        context.dataStore.edit { it[KEY_LAST_ORIGINAL_LANG] = code }
+    }
+
+    suspend fun setLastTargetLanguage(code: String) {
+        context.dataStore.edit { it[KEY_LAST_TARGET_LANG] = code }
+    }
+
+    suspend fun recordLanguageUsage(code: String) {
+        context.dataStore.edit { prefs ->
+            val existing = prefs[KEY_RECENT_LANGUAGES]?.split(",")?.filter { it.isNotBlank() }?.toMutableList() ?: mutableListOf()
+            existing.remove(code)
+            existing.add(0, code)
+            val trimmed = existing.take(6).joinToString(",")
+            prefs[KEY_RECENT_LANGUAGES] = trimmed
+        }
     }
 }
