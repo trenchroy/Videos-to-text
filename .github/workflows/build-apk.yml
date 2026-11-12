@@ -138,7 +138,7 @@ jobs:
           TITLE="Speech to Text APK - Build #${{ github.run_number }}"
 
           echo "Deleting old releases so only the new APK remains..."
-          OLD_RELEASES=$(gh release list --json tagName -q '.[].tagName' 2>/dev/null || true)
+          OLD_RELEASES=$(gh release list --limit 100 --json tagName -q '.[].tagName' 2>/dev/null || true)
           for old_tag in $OLD_RELEASES; do
             if [ -n "$old_tag" ]; then
               echo "Deleting old release: $old_tag"
