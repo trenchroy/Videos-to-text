@@ -112,10 +112,10 @@ jobs:
           fi
           (cd "$ASSET_DIR" && zip speech-to-text.zip speech-to-text.apk)
           (cd "$ASSET_DIR" && zip app-debug.zip app-debug.apk)
-          echo "asset_path=$ASSET_DIR/speech-to-text.apk" >> $GITHUB_OUTPUT
-          echo "zip_path=$ASSET_DIR/speech-to-text.zip" >> $GITHUB_OUTPUT
-          echo "legacy_asset_path=$ASSET_DIR/app-debug.apk" >> $GITHUB_OUTPUT
-          echo "legacy_zip_path=$ASSET_DIR/app-debug.zip" >> $GITHUB_OUTPUT
+          echo "speech_to_text_apk=$ASSET_DIR/speech-to-text.apk" >> $GITHUB_OUTPUT
+          echo "speech_to_text_zip=$ASSET_DIR/speech-to-text.zip" >> $GITHUB_OUTPUT
+          echo "app_debug_apk=$ASSET_DIR/app-debug.apk" >> $GITHUB_OUTPUT
+          echo "app_debug_zip=$ASSET_DIR/app-debug.zip" >> $GITHUB_OUTPUT
 
       - name: Publish APK to GitHub Releases
         id: create_release
@@ -124,13 +124,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh --version
-          ASSET="${{ steps.prepare_asset.outputs.asset_path }}"
-          ZIP_ASSET="${{ steps.prepare_asset.outputs.zip_path }}"
-          LEGACY_ASSET="${{ steps.prepare_asset.outputs.legacy_asset_path }}"
-          LEGACY_ZIP="${{ steps.prepare_asset.outputs.legacy_zip_path }}"
+          ST_APK="${{ steps.prepare_asset.outputs.speech_to_text_apk }}"
+          ST_ZIP="${{ steps.prepare_asset.outputs.speech_to_text_zip }}"
+          LEGACY_APK="${{ steps.prepare_asset.outputs.app_debug_apk }}"
+          LEGACY_ZIP="${{ steps.prepare_asset.outputs.app_debug_zip }}"
 
-          if [ ! -f "$ASSET" ] || [ ! -s "$ASSET" ]; then
-            echo "ERROR: Prepared APK is missing or empty."
+          if [ ! -f "$ST_APK" ] || [ ! -s "$ST_APK" ]; then
+            echo "ERROR: Prepared speech-to-text.apk is missing or empty."
             exit 1
           fi
 
@@ -149,9 +149,10 @@ jobs:
           cat << 'EOF' > release_notes.md
           ### Speech to Text APK (Latest Build)
 
-          This is the latest automatically generated Speech to Text APK and ZIP package built by GitHub Actions.
+          This is the latest automatically generated Speech to Text offline APK package built by GitHub Actions.
           - **App Name**: Speech to Text
-          - **File Name**: speech-to-text.apk
+          - **APK File**: `speech-to-text.apk`
+          - **ZIP File**: `speech-to-text.zip`
           - **Run Number**: ${{ github.run_number }}
           - **Run Attempt**: ${{ github.run_attempt }}
           - **Source Commit**: ${{ github.sha }}
@@ -159,7 +160,7 @@ jobs:
           > ⚠️ **Note**: This APK is signed with a debug keystore for easy installation and testing.
           EOF
 
-          gh release create "$TAG" "$ASSET" "$ZIP_ASSET" "$LEGACY_ASSET" "$LEGACY_ZIP" \
+          gh release create "$TAG" "$ST_APK" "$ST_ZIP" "$LEGACY_APK" "$LEGACY_ZIP" \
             --target "${{ github.sha }}" \
             --title "$TITLE" \
             --notes-file release_notes.md \
@@ -174,16 +175,16 @@ jobs:
             TAG="speech-to-text-v${{ github.run_number }}-${{ github.run_attempt }}"
             echo "Release creation succeeded."
             gh release view "$TAG" || true
-            APK_URL="https://github.com/${{ github.repository }}/releases/latest/download/speech-to-text.apk"
-            ZIP_URL="https://github.com/${{ github.repository }}/releases/latest/download/speech-to-text.zip"
+            ST_APK_URL="https://github.com/${{ github.repository }}/releases/latest/download/speech-to-text.apk"
+            ST_ZIP_URL="https://github.com/${{ github.repository }}/releases/latest/download/speech-to-text.zip"
             LEGACY_APK_URL="https://github.com/${{ github.repository }}/releases/latest/download/app-debug.apk"
-            echo "Direct Speech to Text APK URL: $APK_URL"
-            echo "Direct Speech to Text ZIP URL: $ZIP_URL"
+            echo "Direct Speech to Text APK URL: $ST_APK_URL"
+            echo "Direct Speech to Text ZIP URL: $ST_ZIP_URL"
             {
               echo "## DIRECT SPEECH TO TEXT APK & ZIP DOWNLOAD"
               echo ""
-              echo "- 📲 [Download speech-to-text.apk]($APK_URL)"
-              echo "- 📦 [Download speech-to-text.zip]($ZIP_URL)"
+              echo "- 📲 [Download speech-to-text.apk]($ST_APK_URL)"
+              echo "- 📦 [Download speech-to-text.zip]($ST_ZIP_URL)"
               echo "- 🔗 Legacy filename: [Download app-debug.apk]($LEGACY_APK_URL)"
               echo ""
               echo "The GitHub Actions artifact \`speech-to-text-apk\` remains available as a backup."

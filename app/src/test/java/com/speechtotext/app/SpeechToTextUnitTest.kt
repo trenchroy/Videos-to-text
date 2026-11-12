@@ -61,17 +61,4 @@ class SpeechToTextUnitTest {
         assertTrue(output.contains("kaise"))
         assertTrue(output.contains("hain"))
     }
-
-    @Test
-    fun testTranslatorEngineMappings() {
-        assertEquals("hi", com.speechtotext.app.engine.TranslatorEngine.mapVoskToMlKitTag("hi"))
-        assertEquals("en", com.speechtotext.app.engine.TranslatorEngine.mapVoskToMlKitTag("en-us"))
-        assertEquals("zh", com.speechtotext.app.engine.TranslatorEngine.mapVoskToMlKitTag("cn"))
-        assertEquals("ja", com.speechtotext.app.engine.TranslatorEngine.mapVoskToMlKitTag("ja"))
-
-        val targets = com.speechtotext.app.engine.TranslatorEngine.supportedTargetLanguages
-        assertTrue("Hinglish should be present in target languages", targets.any { it.code == "hinglish" })
-        assertTrue("Hindi should be present in target languages", targets.any { it.code == "hi" })
-        assertTrue("English should be present in target languages", targets.any { it.code == "en" })
-    }
 }

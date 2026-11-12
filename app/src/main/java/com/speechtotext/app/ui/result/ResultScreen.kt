@@ -573,12 +573,7 @@ fun ResultScreen(
                             .clickable {
                                 showExportSheet = false
                                 exportTargetFormat = format
-                                val langSuffix = if (!transcript?.targetLanguageCode.isNullOrBlank() && transcript?.targetLanguageCode != transcript?.originalLanguageCode) {
-                                    val orig = transcript?.originalLanguageCode ?: transcript?.languageCode ?: "orig"
-                                    val target = transcript?.targetLanguageCode ?: "target"
-                                    "_${orig}-to-${target}"
-                                } else ""
-                                val defaultName = "${transcript?.title ?: "transcript"}${langSuffix}.${format.extension}"
+                                val defaultName = "${transcript?.title ?: "transcript"}.${format.extension}"
                                 createDocLauncher.launch(defaultName)
                             }
                             .padding(vertical = 12.dp, horizontal = 14.dp),

@@ -119,8 +119,6 @@ dependencies {
   implementation(libs.media3.exoplayer)
   implementation(libs.media3.ui)
   implementation(libs.pinyin4j)
-  implementation(libs.mlkit.language.id)
-  implementation(libs.mlkit.translate)
   implementation("com.alphacephei:vosk-android:0.3.75@aar")
   implementation("net.java.dev.jna:jna:5.18.1@aar")
 
