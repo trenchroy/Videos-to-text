@@ -30,6 +30,9 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -101,6 +104,7 @@ fun ResultScreen(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var showExportSheet by remember { mutableStateOf(false) }
     var exportTargetFormat by remember { mutableStateOf<ExportFormat?>(null) }
+    var seekTargetSeconds by remember { mutableStateOf<Float?>(null) }
 
     // Word editing dialog state
     var editingWordIndex by remember { mutableStateOf<Int?>(null) }
@@ -250,6 +254,45 @@ fun ResultScreen(
                             .fillMaxSize()
                             .padding(16.dp)
                     ) {
+                        // Colorful Stats Bar
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(SurfaceDark)
+                                .border(1.dp, OutlineDark, RoundedCornerShape(12.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = CyanNeon,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "100% Sahi Sync",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        color = CyanNeon,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            }
+                            Text(
+                                text = "📝 ${transcript?.words?.size ?: 0} words",
+                                style = MaterialTheme.typography.labelSmall.copy(color = TextPrimary)
+                            )
+                            Text(
+                                text = "⏱️ ${TimeFormat.formatSecondsToDisplay(transcript?.durationSeconds ?: 0.0)}",
+                                style = MaterialTheme.typography.labelSmall.copy(color = GoldAccent)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         // Language-specific Output Toggles
                         if (isHindi) {
                             Row(
@@ -424,6 +467,21 @@ fun ResultScreen(
                                                 color = CyanNeon
                                             )
                                         )
+                                        // Play from this timestamp button
+                                        IconButton(
+                                            onClick = {
+                                                seekTargetSeconds = line.start.toFloat()
+                                                selectedTabIndex = 2
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = "Play from here",
+                                                tint = GoldAccent,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
                                     }
                                     Spacer(modifier = Modifier.height(6.dp))
 
@@ -469,7 +527,8 @@ fun ResultScreen(
                                 mediaUriString = transcript?.sourceUri,
                                 totalDurationSeconds = transcript?.durationSeconds ?: 0.0,
                                 captionLines = uiState.captionLines,
-                                style = uiState.captionStyle
+                                style = uiState.captionStyle,
+                                initialSeekSeconds = seekTargetSeconds
                             )
                         }
                         item {

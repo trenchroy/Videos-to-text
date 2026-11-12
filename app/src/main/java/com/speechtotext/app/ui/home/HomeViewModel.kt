@@ -48,6 +48,9 @@ data class HomeUiState(
     val downloadedLanguages: List<Language> = emptyList(),
     val isTranscribing: Boolean = false,
     val progressPercent: Int = 0,
+    val speedMultiplier: Float = 1.0f,
+    val remainingSeconds: Long = 0L,
+    val processedSeconds: Double = 0.0,
     val statusMessage: String = "",
     val errorMessage: String? = null
 )
@@ -185,6 +188,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = _uiState.value.copy(
             isTranscribing = true,
             progressPercent = 0,
+            speedMultiplier = 1.0f,
+            remainingSeconds = 0L,
+            processedSeconds = 0.0,
             statusMessage = "Audio decode aur prepare ho raha hai...",
             errorMessage = null
         )
@@ -206,11 +212,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         return@decodeToPcmChunks false
                     }
 
+                    val speedText = String.format(java.util.Locale.US, "%.1fx", progress.speedMultiplier)
+                    val etaText = if (progress.remainingSeconds > 0) "${TimeFormat.formatSecondsToDisplay(progress.remainingSeconds.toDouble())} baaki" else "Pura hone wala hai..."
+                    val status = "⚡ $speedText speed • $etaText (${progress.percent}%)"
+
                     _uiState.value = _uiState.value.copy(
-                        progressPercent = progress,
-                        statusMessage = "Audio speech text me convert ho raha hai: $progress%"
+                        progressPercent = progress.percent,
+                        speedMultiplier = progress.speedMultiplier,
+                        remainingSeconds = progress.remainingSeconds,
+                        processedSeconds = progress.processedSeconds,
+                        statusMessage = status
                     )
-                    TranscribeService.updateProgress(context, progress, "Audio process ho raha hai: $progress%")
+                    TranscribeService.updateProgress(context, progress.percent, status)
 
                     val isBoundary = voskEngine.acceptWaveForm(chunk, length)
                     if (isBoundary) {

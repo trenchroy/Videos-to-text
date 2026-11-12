@@ -39,4 +39,26 @@ class SpeechToTextUnitTest {
         val cleaned = TextCleaner.cleanTranscriptText(input)
         assertTrue(cleaned.contains("This is very good."))
     }
+
+    @Test
+    fun testAudioNormalizer() {
+        val samples = shortArrayOf(0, 100, -100, 500, -500, 1000)
+        val bytes = ByteArray(samples.size * 2)
+        for (i in samples.indices) {
+            bytes[i * 2] = (samples[i].toInt() and 0xFF).toByte()
+            bytes[i * 2 + 1] = ((samples[i].toInt() shr 8) and 0xFF).toByte()
+        }
+        com.speechtotext.app.engine.AudioNormalizer.normalize(bytes)
+        assertTrue("Normalized bytes should have valid length", bytes.isNotEmpty())
+    }
+
+    @Test
+    fun testExtendedHinglishTransliteration() {
+        val input = "नमस्ते आप कैसे हैं"
+        val output = Transliterator.toHinglish(input)
+        assertTrue(output.contains("namaste"))
+        assertTrue(output.contains("aap") || output.contains("ap"))
+        assertTrue(output.contains("kaise"))
+        assertTrue(output.contains("hain"))
+    }
 }

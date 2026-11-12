@@ -70,10 +70,13 @@ class TranscribeService : Service() {
     }
 
     private lateinit var notificationManager: NotificationManager
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val powerManager = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        wakeLock = powerManager.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "SpeechToText::TranscribeWakeLock")
         createNotificationChannel()
     }
 
@@ -81,6 +84,12 @@ class TranscribeService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 resetCancellation()
+                try {
+                    if (wakeLock?.isHeld == false) {
+                        wakeLock?.acquire(3 * 3600 * 1000L) // 3 hours max wake lock
+                    }
+                } catch (ignored: Exception) {}
+
                 val status = intent.getStringExtra(EXTRA_STATUS) ?: "Audio process ho raha hai..."
                 val notification = buildNotification(0, status)
                 startForeground(NOTIFICATION_ID, notification)
@@ -92,15 +101,30 @@ class TranscribeService : Service() {
             }
             ACTION_CANCEL -> {
                 cancelTranscription()
+                releaseWakeLock()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
             ACTION_STOP -> {
+                releaseWakeLock()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         }
         return START_NOT_STICKY
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
+        } catch (ignored: Exception) {}
+    }
+
+    override fun onDestroy() {
+        releaseWakeLock()
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

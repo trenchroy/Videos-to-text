@@ -183,15 +183,58 @@ fun HomeScreen(
                 .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            // Upload Banner Box
+            // Feature Highlights Row (Colorful Pills)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(CyanNeon.copy(alpha = 0.15f))
+                        .border(1.dp, CyanNeon.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Text("⚡ Ultra-Fast 16kHz", color = CyanNeon, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFF8A2BE2).copy(alpha = 0.15f))
+                        .border(1.dp, Color(0xFF8A2BE2).copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Text("🎬 Long Media", color = Color(0xFFD8B4FE), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(com.speechtotext.app.ui.theme.SuccessGreen.copy(alpha = 0.15f))
+                        .border(1.dp, com.speechtotext.app.ui.theme.SuccessGreen.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Text("🔒 100% Offline", color = com.speechtotext.app.ui.theme.SuccessGreen, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+                }
+            }
+
+            // Upload Banner Box with Vibrant Multi-Color Gradient
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(24.dp))
                     .background(SurfaceDark)
                     .border(
-                        width = 1.5.dp,
-                        brush = Brush.horizontalGradient(listOf(CyanNeon.copy(alpha = 0.6f), OutlineDark)),
+                        width = 2.dp,
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                CyanNeon,
+                                Color(0xFF8A2BE2),
+                                GoldAccent,
+                                Color(0xFFFF4081)
+                            )
+                        ),
                         shape = RoundedCornerShape(24.dp)
                     )
                     .clickable {
@@ -214,38 +257,42 @@ fun HomeScreen(
                             )
                         )
                     }
-                    .padding(vertical = 32.dp, horizontal = 20.dp)
+                    .padding(vertical = 28.dp, horizontal = 20.dp)
                     .testTag("upload_media_box"),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
+                            .size(68.dp)
                             .clip(CircleShape)
-                            .background(CyanGlow),
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(CyanNeon.copy(alpha = 0.35f), Color(0xFF8A2BE2).copy(alpha = 0.1f))
+                                )
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.UploadFile,
                             contentDescription = "Upload",
                             tint = CyanNeon,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(34.dp)
                         )
                     }
                     Spacer(modifier = Modifier.height(14.dp))
                     Text(
                         text = "Video / Audio upload karo",
                         style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             color = TextPrimary,
-                            fontSize = 18.sp
+                            fontSize = 19.sp
                         )
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "MP4, MOV, WEBM, MKV, MP3, WAV, M4A, AAC, FLAC",
-                        style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
+                        text = "Long & Short Videos: MP4, MOV, WEBM, MKV, MP3, WAV, FLAC",
+                        style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     )
                 }
             }
@@ -368,26 +415,55 @@ fun HomeScreen(
                             Text(
                                 text = uiState.statusMessage,
                                 style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.SemiBold,
+                                    fontWeight = FontWeight.Bold,
                                     color = CyanNeon
                                 ),
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
                                 text = "${uiState.progressPercent}%",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.ExtraBold,
                                     color = CyanNeon
                                 )
                             )
                         }
-                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Stats Row: Speed & Processed Duration
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(CyanNeon.copy(alpha = 0.2f))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = "⚡ Speed: ${String.format(java.util.Locale.US, "%.1fx", uiState.speedMultiplier)}",
+                                        color = CyanNeon,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "${TimeFormat.formatSecondsToDisplay(uiState.processedSeconds)} / ${TimeFormat.formatSecondsToDisplay(uiState.selectedMedia?.durationSeconds ?: 0.0)}",
+                                style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
                         LinearProgressIndicator(
                             progress = { uiState.progressPercent / 100f },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp)),
+                                .height(10.dp)
+                                .clip(RoundedCornerShape(5.dp)),
                             color = CyanNeon,
                             trackColor = OutlineDark
                         )
@@ -460,6 +536,23 @@ fun MediaPreviewCard(media: SelectedMediaInfo) {
         borderColor = OutlineDark,
         containerColor = SurfaceDark
     ) {
+        if (media.durationSeconds >= 300.0) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF8A2BE2).copy(alpha = 0.15f))
+                    .border(1.dp, Color(0xFF8A2BE2).copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "🎬 Long Video/Audio Optimized: Background hardware decoder active",
+                    color = Color(0xFFD8B4FE),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                )
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically

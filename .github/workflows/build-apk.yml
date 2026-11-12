@@ -1,4 +1,4 @@
-name: Build Debug APK
+name: Build Speech to Text APK
 
 on:
   push:
@@ -95,7 +95,7 @@ jobs:
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
+          name: speech-to-text-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
@@ -104,14 +104,18 @@ jobs:
         run: |
           ASSET_DIR="$RUNNER_TEMP/release_asset"
           mkdir -p "$ASSET_DIR"
+          cp "app/build/outputs/apk/debug/app-debug.apk" "$ASSET_DIR/speech-to-text.apk"
           cp "app/build/outputs/apk/debug/app-debug.apk" "$ASSET_DIR/app-debug.apk"
-          if [ ! -f "$ASSET_DIR/app-debug.apk" ] || [ ! -s "$ASSET_DIR/app-debug.apk" ]; then
-            echo "ERROR: Failed to prepare release asset."
+          if [ ! -f "$ASSET_DIR/speech-to-text.apk" ] || [ ! -s "$ASSET_DIR/speech-to-text.apk" ]; then
+            echo "ERROR: Failed to prepare speech-to-text.apk release asset."
             exit 1
           fi
+          (cd "$ASSET_DIR" && zip speech-to-text.zip speech-to-text.apk)
           (cd "$ASSET_DIR" && zip app-debug.zip app-debug.apk)
-          echo "asset_path=$ASSET_DIR/app-debug.apk" >> $GITHUB_OUTPUT
-          echo "zip_path=$ASSET_DIR/app-debug.zip" >> $GITHUB_OUTPUT
+          echo "asset_path=$ASSET_DIR/speech-to-text.apk" >> $GITHUB_OUTPUT
+          echo "zip_path=$ASSET_DIR/speech-to-text.zip" >> $GITHUB_OUTPUT
+          echo "legacy_asset_path=$ASSET_DIR/app-debug.apk" >> $GITHUB_OUTPUT
+          echo "legacy_zip_path=$ASSET_DIR/app-debug.zip" >> $GITHUB_OUTPUT
 
       - name: Publish APK to GitHub Releases
         id: create_release
@@ -121,30 +125,41 @@ jobs:
         run: |
           gh --version
           ASSET="${{ steps.prepare_asset.outputs.asset_path }}"
+          ZIP_ASSET="${{ steps.prepare_asset.outputs.zip_path }}"
+          LEGACY_ASSET="${{ steps.prepare_asset.outputs.legacy_asset_path }}"
+          LEGACY_ZIP="${{ steps.prepare_asset.outputs.legacy_zip_path }}"
+
           if [ ! -f "$ASSET" ] || [ ! -s "$ASSET" ]; then
             echo "ERROR: Prepared APK is missing or empty."
             exit 1
           fi
-          FILENAME=$(basename "$ASSET")
-          if [ "$FILENAME" != "app-debug.apk" ]; then
-            echo "ERROR: Release asset filename must be exactly app-debug.apk"
-            exit 1
-          fi
-          ZIP_ASSET="${{ steps.prepare_asset.outputs.zip_path }}"
-          TAG="debug-apk-build-${{ github.run_number }}-${{ github.run_attempt }}"
-          TITLE="Debug APK Build #${{ github.run_number }}"
-          cat << 'EOF' > release_notes.md
-          ### Debug APK Build
 
-          This is an automatically generated debug APK and ZIP package built by GitHub Actions.
+          TAG="speech-to-text-v${{ github.run_number }}-${{ github.run_attempt }}"
+          TITLE="Speech to Text APK - Build #${{ github.run_number }}"
+
+          echo "Deleting old releases so only the new APK remains..."
+          OLD_RELEASES=$(gh release list --json tagName -q '.[].tagName' 2>/dev/null || true)
+          for old_tag in $OLD_RELEASES; do
+            if [ -n "$old_tag" ]; then
+              echo "Deleting old release: $old_tag"
+              gh release delete "$old_tag" --yes --cleanup-tag || true
+            fi
+          done
+
+          cat << 'EOF' > release_notes.md
+          ### Speech to Text APK (Latest Build)
+
+          This is the latest automatically generated Speech to Text APK and ZIP package built by GitHub Actions.
+          - **App Name**: Speech to Text
+          - **File Name**: speech-to-text.apk
           - **Run Number**: ${{ github.run_number }}
           - **Run Attempt**: ${{ github.run_attempt }}
           - **Source Commit**: ${{ github.sha }}
 
-          > ⚠️ **Note**: This APK is intended for testing and development purposes. It is signed with a debug keystore.
+          > ⚠️ **Note**: This APK is signed with a debug keystore for easy installation and testing.
           EOF
 
-          gh release create "$TAG" "$ASSET" "$ZIP_ASSET" \
+          gh release create "$TAG" "$ASSET" "$ZIP_ASSET" "$LEGACY_ASSET" "$LEGACY_ZIP" \
             --target "${{ github.sha }}" \
             --title "$TITLE" \
             --notes-file release_notes.md \
@@ -156,27 +171,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ steps.create_release.outcome }}" = "success" ]; then
-            TAG="debug-apk-build-${{ github.run_number }}-${{ github.run_attempt }}"
+            TAG="speech-to-text-v${{ github.run_number }}-${{ github.run_attempt }}"
             echo "Release creation succeeded."
             gh release view "$TAG" || true
-            DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/latest/download/app-debug.apk"
-            ZIP_URL="https://github.com/${{ github.repository }}/releases/latest/download/app-debug.zip"
-            echo "Direct APK URL: $DOWNLOAD_URL"
-            echo "Direct ZIP URL: $ZIP_URL"
+            APK_URL="https://github.com/${{ github.repository }}/releases/latest/download/speech-to-text.apk"
+            ZIP_URL="https://github.com/${{ github.repository }}/releases/latest/download/speech-to-text.zip"
+            LEGACY_APK_URL="https://github.com/${{ github.repository }}/releases/latest/download/app-debug.apk"
+            echo "Direct Speech to Text APK URL: $APK_URL"
+            echo "Direct Speech to Text ZIP URL: $ZIP_URL"
             {
-              echo "## DIRECT APK & ZIP DOWNLOAD"
+              echo "## DIRECT SPEECH TO TEXT APK & ZIP DOWNLOAD"
               echo ""
-              echo "- [Download app-debug.apk]($DOWNLOAD_URL)"
-              echo "- [Download app-debug.zip]($ZIP_URL)"
+              echo "- 📲 [Download speech-to-text.apk]($APK_URL)"
+              echo "- 📦 [Download speech-to-text.zip]($ZIP_URL)"
+              echo "- 🔗 Legacy filename: [Download app-debug.apk]($LEGACY_APK_URL)"
               echo ""
-              echo "The normal Actions artifact \`app-debug-apk\` remains available as a backup."
+              echo "The GitHub Actions artifact \`speech-to-text-apk\` remains available as a backup."
             } >> $GITHUB_STEP_SUMMARY
           else
             echo "::warning::GitHub Release creation failed or was skipped."
-            echo "The APK build succeeded and the GitHub Actions artifact 'app-debug-apk' remains available as a backup."
+            echo "The APK build succeeded and the GitHub Actions artifact 'speech-to-text-apk' remains available as a backup."
             {
               echo "## APK Build Status"
               echo ""
-              echo "GitHub Release creation was not completed. The GitHub Actions artifact \`app-debug-apk\` remains available for download."
+              echo "GitHub Release creation was not completed. The GitHub Actions artifact \`speech-to-text-apk\` remains available for download."
             } >> $GITHUB_STEP_SUMMARY
           fi

@@ -71,11 +71,12 @@ fun CaptionPreview(
     totalDurationSeconds: Double,
     captionLines: List<CaptionLine>,
     style: CaptionStyle,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    initialSeekSeconds: Float? = null
 ) {
     val context = LocalContext.current
     var isPlaying by remember { mutableStateOf(false) }
-    var currentPositionSec by remember { mutableFloatStateOf(0f) }
+    var currentPositionSec by remember { mutableFloatStateOf(initialSeekSeconds ?: 0f) }
     val maxDurationSec = totalDurationSeconds.toFloat().coerceAtLeast(1f)
 
     val exoPlayer = remember(mediaUriString) {
@@ -100,6 +101,15 @@ fun CaptionPreview(
             }
         } else {
             null
+        }
+    }
+
+    LaunchedEffect(initialSeekSeconds) {
+        if (initialSeekSeconds != null) {
+            currentPositionSec = initialSeekSeconds
+            exoPlayer?.seekTo((initialSeekSeconds * 1000).toLong())
+            exoPlayer?.play()
+            isPlaying = true
         }
     }
 
