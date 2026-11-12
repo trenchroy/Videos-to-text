@@ -1,0 +1,6 @@
+{
+  "name": "Speech to Text",
+  "description": "Offline speech-to-text transcriber and word-timed caption generator for audio and video files or live mic with Hinglish support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
